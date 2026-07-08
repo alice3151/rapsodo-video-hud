@@ -19,7 +19,6 @@ jobs:
 
     - name: Install dependencies and yt-dlp
       run: |
-        # 依存関係のインストール
         python -m pip install --upgrade pip
         pip install pandas numpy moviepy pillow requests
         sudo apt-get update && sudo apt-get install -y ffmpeg
@@ -33,13 +32,13 @@ jobs:
         # 1. 動画のURLを抽出（YouTube、またはギガファイル便）
         VIDEO_URL=$(echo "$ISSUE_BODY" | grep -oE 'https?://([a-zA-Z0-9_-]+\.)?(youtube\.com|youtu\.be|gigafile\.nu)[^ \n\r)]+' | head -n 1)
         
-        # 2. CSVのURLを確実に抽出（カッコなどのゴミをすべて排除する形式に強化）
-        CSV_URL=$(echo "$ISSUE_BODY" | grep -oE 'https://github.com/[^ \n\r)]+' | grep '\.csv' | sed 's/[(|)]//g' | head -n 1)
+        # 2. CSVのURLを確実に抽出（github発のS3リンクやどんなドメインでも .csv が入っていれば全取得し、カッコを掃除）
+        CSV_URL=$(echo "$ISSUE_BODY" | grep -oE 'https?://[^ \n\r)]+\.csv[^ \n\r)]*' | sed 's/[(|)]//g' | head -n 1)
         
         # 3. 秒数を抽出
         PITCH_TIME=$(echo "$ISSUE_BODY" | grep -A 2 '秒数' | grep -oE '[0-9]+(\.[0-9]+)?' | head -n 1)
 
-        echo "=== 読み込みチェック（CSV完全救出版） ==="
+        echo "=== 読み込みチェック（CSV最終防衛線） ==="
         echo "VIDEO: [$VIDEO_URL]"
         echo "CSV: [$CSV_URL]"
         echo "TIME: [$PITCH_TIME]"
