@@ -1,0 +1,43 @@
+name: Auto Video Generation
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  build:
+    if: contains(github.event.issue.labels.*.name, 'video-generation')
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip upgrade pip
+        pip install pandas numpy moviepy pillow
+
+    - name: Parse Issue Inputs
+      id: parse_args
+      run: |
+        # フォームに入力された値を取得して環境変数に入れる
+        echo "VIDEO_NAME=$(echo '${{ github.event.issue.body }}' | grep -A 1 '動画ファイル名' | tail -n 1 | xargs)" >> $GITHUB_ENV
+        echo "CSV_NAME=$(echo '${{ github.event.issue.body }}' | grep -A 1 'ラプソードCSVファイル名' | tail -n 1 | xargs)" >> $GITHUB_ENV
+        echo "PITCH_TIME=$(echo '${{ github.event.issue.body }}' | grep -A 1 '初球の秒数' | tail -n 1 | xargs)" >> $GITHUB_ENV
+
+    - name: Run Python Script
+      run: |
+        # ここで前述のPythonスクリプトを実行（環境変数から値を受け取るように書き換えたもの）
+        python auto_cutter.py --video "$VIDEO_NAME" --csv "$CSV_NAME" --time "$PITCH_TIME"
+
+    - name: Upload Finished Video
+      uses: actions/upload-artifact@v4
+      with:
+        name: finished-pitching-video
+        path: highlight_output.mp4
