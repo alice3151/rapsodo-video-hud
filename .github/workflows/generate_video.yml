@@ -6,8 +6,8 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest  # ← 「if:」の行を消して、直接「runs-on」から始まるようにします
-    
+    runs-on: ubuntu-latest
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
@@ -17,24 +17,35 @@ jobs:
       with:
         python-version: '3.10'
 
-    - name: Install dependencies
+    - name: Install dependencies and yt-dlp
       run: |
         python -m pip install --upgrade pip
         pip install pandas numpy moviepy pillow requests
+        # YouTubeから動画を高画質で引き抜くためのツールをインストール
+        sudo map_repo_silent=1 apt-get update && sudo apt-get install -y ffmpeg
+        pip install yt-dlp
 
     - name: Parse Issue Inputs and Download Files
       id: parse_args
       run: |
-        # フォームから添付ファイルのURLを抽出
-        VIDEO_URL=$(echo '${{ github.event.issue.body }}' | grep -oE 'https://github.com/[^)]+\.(mp4|mov|avi)' | head -n 1)
+        # フォームから入力を取得
+        VIDEO_INPUT=$(echo '${{ github.event.issue.body }}' | grep -A 1 '動画ファイル' | tail -n 1 | xargs)
         CSV_URL=$(echo '${{ github.event.issue.body }}' | grep -oE 'https://github.com/[^)]+\.csv' | head -n 1)
         PITCH_TIME=$(echo '${{ github.event.issue.body }}' | grep -A 1 '初球の秒数' | tail -n 1 | xargs)
 
         echo "PITCH_TIME=$PITCH_TIME" >> $GITHUB_ENV
 
-        # ファイルのダウンロード
-        curl -L -o input_video.mp4 "$VIDEO_URL"
+        # CSVのダウンロード
         curl -L -o rapsodo_data.csv "$CSV_URL"
+
+        # 動画の処理：YouTubeリンクかそれ以外かで分岐
+        if [[ "$VIDEO_INPUT" == *"youtube.com"* || "$VIDEO_INPUT" == *"youtu.be"* ]]; then
+          echo "YouTube動画をダウンロード中..."
+          yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" "$VIDEO_INPUT" -o "input_video.mp4" --merge-output-format mp4
+        else
+          echo "通常のURLからダウンロード中..."
+          curl -L -o input_video.mp4 "$VIDEO_INPUT"
+        fi
 
     - name: Run Python Script
       run: |
