@@ -1,32 +1,30 @@
 name: "🎥 ラプソード動画自動生成フォーム"
-description: "初球の時間を入力して動画を自動生成します"
+description: "ファイル添付と初球の時間を入力して動画を自動生成します"
 title: "[動画生成] ラプソードデータ合成"
 labels: ["video-generation"]
 body:
   - type: markdown
     attributes:
       value: |
-        必要事項を入力して「Submit new issue」を押すと、自動で動画の切り出しとデータ合成が始まります。
-  - type: input
-    id: video_name
+        必要事項を入力・添付して「Submit new issue」を押すと、自動で動画の切り出しとデータ合成が始まります。
+  - type: textarea
+    id: video_file
     attributes:
-      label: "動画ファイル名"
-      placeholder: "example: input_video.mp4"
-      default: "input_video.mp4"
+      label: "🎬 動画ファイルをここにドラッグ＆ドロップ"
+      placeholder: "動画ファイルをここにドロップして、アップロードが完了する（URLが表示される）までお待ちください"
     validations:
       required: true
-  - type: input
-    id: csv_name
+  - type: textarea
+    id: csv_file
     attributes:
-      label: "ラプソードCSVファイル名"
-      placeholder: "example: rapsodo_data.csv"
-      default: "rapsodo_data.csv"
+      label: "📊 ラプソードCSVファイルをここにドラッグ＆ドロップ"
+      placeholder: "CSVファイルをここにドロップして、アップロードが完了する（URLが表示される）までお待ちください"
     validations:
       required: true
   - type: input
     id: first_pitch_time
     attributes:
-      label: "初球の秒数（動画内での時間）"
+      label: "⏱️ 初球の秒数（動画内での時間）"
       placeholder: "example: 12.5"
     validations:
       required: true
