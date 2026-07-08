@@ -21,30 +21,50 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install pandas numpy moviepy pillow requests
-        # YouTubeから動画を高画質で引き抜くためのツールをインストール
-        sudo map_repo_silent=1 apt-get update && sudo apt-get install -y ffmpeg
+        sudo apt-get update && sudo apt-get install -y ffmpeg
         pip install yt-dlp
 
     - name: Parse Issue Inputs and Download Files
       id: parse_args
       run: |
-        # フォームから入力を取得
-        VIDEO_INPUT=$(echo '${{ github.event.issue.body }}' | grep -A 1 '動画ファイル' | tail -n 1 | xargs)
-        CSV_URL=$(echo '${{ github.event.issue.body }}' | grep -oE 'https://github.com/[^)]+\.csv' | head -n 1)
-        PITCH_TIME=$(echo '${{ github.event.issue.body }}' | grep -A 1 '初球の秒数' | tail -n 1 | xargs)
+        BODY='${{ github.event.issue.body }}'
+        
+        # 1. CSVのURLを最優先で抽出 (GitHubのassetsにある.csvリンクを正確に抜く)
+        CSV_URL=$(echo "$BODY" | grep -oE 'https://github.com/[^)]+\.csv' | head -n 1)
+        
+        # 2. 動画のURLを抽出 (YouTubeリンク、またはGitHubのmp4リンク)
+        VIDEO_URL=""
+        if echo "$BODY" | grep -qE '(youtube\.com|youtu\.be)'; then
+          VIDEO_URL=$(echo "$BODY" | grep -oE 'https://(www\.)?(youtube\.com|youtu\.be)/[^ \n)]+' | head -n 1)
+        else
+          VIDEO_URL=$(echo "$BODY" | grep -oE 'https://github.com/[^)]+\.(mp4|mov|avi)' | head -n 1)
+        fi
+        
+        # 3. 秒数を抽出 (コロンや文字を排除して純粋な数字・少数だけを抜き出す)
+        PITCH_TIME=$(echo "$BODY" | grep -A 1 '初球の秒数' | tail -n 1 | grep -oE '[0-9]+(\.[0-9]+)?' | head -n 1)
 
+        # デバッグ用に抽出結果をログに出す
+        echo "=== 抽出結果 ==="
+        echo "VIDEO: $VIDEO_URL"
+        echo "CSV: $CSV_URL"
+        echo "TIME: $PITCH_TIME"
+        echo "==============="
+
+        if [ -z "$PITCH_TIME" ]; then
+          PITCH_TIME="50.0" # 万が一空っぽなら50秒をデフォルトにする
+        fi
         echo "PITCH_TIME=$PITCH_TIME" >> $GITHUB_ENV
 
         # CSVのダウンロード
         curl -L -o rapsodo_data.csv "$CSV_URL"
 
-        # 動画の処理：YouTubeリンクかそれ以外かで分岐
-        if [[ "$VIDEO_INPUT" == *"youtube.com"* || "$VIDEO_INPUT" == *"youtu.be"* ]]; then
-          echo "YouTube動画をダウンロード中..."
-          yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" "$VIDEO_INPUT" -o "input_video.mp4" --merge-output-format mp4
+        # 動画のダウンロード
+        if [[ "$VIDEO_URL" == *"youtube.com"* || "$VIDEO_URL" == *"youtu.be"* ]]; then
+          echo "YouTubeから動画をダウンロードしています..."
+          yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" "$VIDEO_URL" -o "input_video.mp4" --merge-output-format mp4
         else
-          echo "通常のURLからダウンロード中..."
-          curl -L -o input_video.mp4 "$VIDEO_INPUT"
+          echo "GitHubから動画をダウンロードしています..."
+          curl -L -o input_video.mp4 "$VIDEO_URL"
         fi
 
     - name: Run Python Script
