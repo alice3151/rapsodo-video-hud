@@ -26,8 +26,9 @@ jobs:
 
     - name: Force Download Files
       run: |
-        # エラーが起きる文字抽出を完全に廃止し、今回のURLを直接指定します
-        VIDEO_URL="https://91.download.gigafile.nu/0713-g103bf5d8268c22fc3ba1b894b9ad8cd2"
+        # YouTubeの動画URLをここに貼り付けてください
+        VIDEO_URL="https://www.youtube.com/watch?v=xxxxxxx"
+        
         CSV_URL="https://github.com/alice3151/rapsodo-video-hud/user-attachments/files/29784548/1.BT.Rapsodo.-.csv"
         PITCH_TIME="50.0"
 
@@ -36,8 +37,8 @@ jobs:
         echo "CSVデータをダウンロード中..."
         curl -L -o rapsodo_data.csv "$CSV_URL"
 
-        echo "ギガファイル便から1.22GBの動画を直接ダウンロード中（数分かかります）..."
-        curl -H "User-Agent: Mozilla/5.0" -L -o input_video.mp4 "$VIDEO_URL"
+        echo "YouTubeから動画をダウンロード中..."
+        yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" "$VIDEO_URL" -o "input_video.mp4" --merge-output-format mp4
 
     - name: Run Python Script
       run: |
