@@ -6,24 +6,32 @@ from moviepy.editor import VideoFileClip, VideoClip
 from PIL import Image, ImageDraw, ImageFont
 
 def load_rapsodo_data(csv_path, first_pitch_time):
-    # どんなCSVでも読み込めるように、まずはカンマ区切りで読み込む
+    # 重複する列名があ记录されても自動でリネームして読み込む
     df = pd.read_csv(csv_path, encoding='utf-8-sig')
     
-    # 時間が書いてある列を徹底的に探す（日本語・英語、大文字小文字対応）
-    time_keywords = ['date', 'time', '日付', '時刻', 'timestamp']
+    # 1列目の「日付」または「Date」列を最優先で使用する
     time_col = None
     for col in df.columns:
-        if any(kw in str(col).lower() for kw in time_keywords):
-            # 空白ばかりの列は除外
-            if df[col].dropna().astype(str).str.contains('[:/]').any():
+        if '日付' in str(col) or str(col).strip().lower() == 'date':
+            # ちゃんと日付っぽい文字列が入っているか確認
+            sample_val = df[col].dropna().astype(str).values
+            if len(sample_val) > 0 and any('/' in s or '-' in s for s in sample_val[:5]):
                 time_col = col
                 break
                 
     if time_col is None:
-        print("警告: 時間列が特定できなかったため、15秒間隔で自動配置します。")
+        # 万が一見つからなければ、最初に見つかった「time」や「日付」を含む列を使用
+        time_keywords = ['日付', 'date', 'time', '時刻']
+        for col in df.columns:
+            if any(kw in str(col).lower() for kw in time_keywords):
+                time_col = col
+                break
+
+    if time_col is None:
+        print("警告: 日付列が特定できなかったため、15秒間隔で自動配置します。")
         df['Elapsed_Seconds'] = df.index * 15.0
     else:
-        # 日時文字列をシリアル変換
+        # スラッシュやハイフン区切りの日付（2026/05/27など）を綺麗に変換
         df['Timestamp'] = pd.to_datetime(df[time_col], errors='coerce')
         df = df.dropna(subset=['Timestamp']).sort_values('Timestamp').reset_index(drop=True)
         start_time = df['Timestamp'].iloc[0]
@@ -33,7 +41,6 @@ def load_rapsodo_data(csv_path, first_pitch_time):
     return df
 
 def get_column_value(row, keywords, default="0"):
-    # キーワードに部分一致する列を探して値を返す（例: 'velo' で 'Velocity' や 'PitchBallVelocity' を探す）
     for col in row.index:
         if any(kw.lower() in str(col).lower() for kw in keywords):
             val = str(row[col]).strip()
@@ -51,9 +58,7 @@ def make_hud_layer(width, height, row):
     except IOError:
         font_title = font_main = font_sub = ImageFont.load_default()
 
-    # 通常のラプソードCSVと特殊CSVの両方に対応するキーワード設定
     speed_val = get_column_value(row, ['pitchballvelocity', 'velocity', 'speed', '球速', 'ball speed'])
-    # 小数点以下が長すぎる場合は綺麗にする
     try: speed = f"{float(speed_val):.1f} MPH"
     except: speed = f"{speed_val} MPH"
 
@@ -61,7 +66,6 @@ def make_hud_layer(width, height, row):
     h_brk = get_column_value(row, ['horizontalbreak', 'hb ', '横変化', 'hb (']) + " IN"
     p_type = get_column_value(row, ['pitchtype', 'pitch type', '球種', 'type'], default="UNKNOWN")
 
-    # HUD（データ表示枠）の描画
     draw.rounded_rectangle([40, 40, 420, 290], radius=12, fill=(0, 60, 100, 50), outline=(0, 180, 255, 200), width=2)
     draw.text((55, 50), "SEET BT - RAPSODO", fill=(255, 255, 255, 200), font=font_title)
     draw.line([(55, 75), (405, 75)], fill=(0, 180, 255, 150), width=1)
