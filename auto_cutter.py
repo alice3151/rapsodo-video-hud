@@ -6,16 +6,40 @@ from moviepy.editor import VideoFileClip, VideoClip
 from PIL import Image, ImageDraw, ImageFont
 
 def load_rapsodo_data(csv_path, first_pitch_time):
-    df = pd.read_csv(csv_path)
-    # ラプソードの仕様に合わせて列名を自動調整
-    time_col = [c for c in df.columns if 'time' in c.lower() or 'date' in c.lower()][0]
-    df['Timestamp'] = pd.to_datetime(df[time_col]) 
-    df = df.sort_values('Timestamp').reset_index(drop=True)
+    # どんなCSVでも読み込めるように、まずはカンマ区切りで読み込む
+    df = pd.read_csv(csv_path, encoding='utf-8-sig')
     
-    start_time = df['Timestamp'].iloc[0]
-    df['Elapsed_Seconds'] = (df['Timestamp'] - start_time).dt.total_seconds()
+    # 時間が書いてある列を徹底的に探す（日本語・英語、大文字小文字対応）
+    time_keywords = ['date', 'time', '日付', '時刻', 'timestamp']
+    time_col = None
+    for col in df.columns:
+        if any(kw in str(col).lower() for kw in time_keywords):
+            # 空白ばかりの列は除外
+            if df[col].dropna().astype(str).str.contains('[:/]').any():
+                time_col = col
+                break
+                
+    if time_col is None:
+        print("警告: 時間列が特定できなかったため、15秒間隔で自動配置します。")
+        df['Elapsed_Seconds'] = df.index * 15.0
+    else:
+        # 日時文字列をシリアル変換
+        df['Timestamp'] = pd.to_datetime(df[time_col], errors='coerce')
+        df = df.dropna(subset=['Timestamp']).sort_values('Timestamp').reset_index(drop=True)
+        start_time = df['Timestamp'].iloc[0]
+        df['Elapsed_Seconds'] = (df['Timestamp'] - start_time).dt.total_seconds()
+    
     df['Video_Target_Time'] = first_pitch_time + df['Elapsed_Seconds']
     return df
+
+def get_column_value(row, keywords, default="0"):
+    # キーワードに部分一致する列を探して値を返す（例: 'velo' で 'Velocity' や 'PitchBallVelocity' を探す）
+    for col in row.index:
+        if any(kw.lower() in str(col).lower() for kw in keywords):
+            val = str(row[col]).strip()
+            if val and val != 'nan':
+                return val
+    return default
 
 def make_hud_layer(width, height, row):
     img = Image.new("RGBA", (width, height), (0, 0, 0, 0))
@@ -27,18 +51,23 @@ def make_hud_layer(width, height, row):
     except IOError:
         font_title = font_main = font_sub = ImageFont.load_default()
 
-    # 列名の揺れに対応
-    speed = f"{row.get('Velocity', row.get('PitchBallSpeed', '0'))} MPH"
-    v_break = f"{row.get('VerticalBreak', row.get('InducedVerticalBreak', '0'))} IN"
-    h_break = f"{row.get('HorizontalBreak', row.get('HorizontalBreak', '0'))} IN"
-    p_type = str(row.get('PitchType', 'UNKNOWN'))
+    # 通常のラプソードCSVと特殊CSVの両方に対応するキーワード設定
+    speed_val = get_column_value(row, ['pitchballvelocity', 'velocity', 'speed', '球速', 'ball speed'])
+    # 小数点以下が長すぎる場合は綺麗にする
+    try: speed = f"{float(speed_val):.1f} MPH"
+    except: speed = f"{speed_val} MPH"
 
+    v_brk = get_column_value(row, ['verticalbreak', 'vb ', '縦変化', 'inducedvertical', 'vb (']) + " IN"
+    h_brk = get_column_value(row, ['horizontalbreak', 'hb ', '横変化', 'hb (']) + " IN"
+    p_type = get_column_value(row, ['pitchtype', 'pitch type', '球種', 'type'], default="UNKNOWN")
+
+    # HUD（データ表示枠）の描画
     draw.rounded_rectangle([40, 40, 420, 290], radius=12, fill=(0, 60, 100, 50), outline=(0, 180, 255, 200), width=2)
     draw.text((55, 50), "SEET BT - RAPSODO", fill=(255, 255, 255, 200), font=font_title)
     draw.line([(55, 75), (405, 75)], fill=(0, 180, 255, 150), width=1)
     draw.text((55, 90), f"SPEED: {speed}", fill=(0, 255, 150, 255), font=font_main)
-    draw.text((55, 155), f"V-BRK: {v_break}", fill=(255, 255, 255, 220), font=font_sub)
-    draw.text((55, 195), f"H-BRK: {h_break}", fill=(255, 255, 255, 220), font=font_sub)
+    draw.text((55, 155), f"V-BRK: {v_brk}", fill=(255, 255, 255, 220), font=font_sub)
+    draw.text((55, 195), f"H-BRK: {h_brk}", fill=(255, 255, 255, 220), font=font_sub)
     draw.text((55, 240), f"TYPE: {p_type}", fill=(255, 200, 0, 255), font=font_sub)
     return np.array(img)
 
@@ -75,6 +104,10 @@ def main():
         if sub_clip.audio: combined_clip = combined_clip.set_audio(sub_clip.audio)
         clips.append(combined_clip)
     
+    if len(clips) == 0:
+        print("エラー: 切り出せる投球がありませんでした。動画の長さや初球の時間を確認してください。")
+        exit(3)
+
     from moviepy.editor import concatenate_videoclips
     final_video = concatenate_videoclips(clips)
     final_video.write_videofile("highlight_output.mp4", fps=video.fps, codec="libx264", audio_codec="aac")
