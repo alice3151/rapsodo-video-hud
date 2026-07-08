@@ -24,45 +24,20 @@ jobs:
         sudo apt-get update && sudo apt-get install -y ffmpeg
         pip install yt-dlp
 
-    - name: Parse Issue Inputs and Download Files
-      id: parse_args
-      # GitHubのバグを回避するため、env（環境変数）として安全に文章を渡します
-      env:
-        ISSUE_BODY: ${{ github.event.issue.body }}
+    - name: Force Download Files
       run: |
-        # 1. CSVのURLを確実に抽出
-        CSV_URL=$(echo "$ISSUE_BODY" | grep -oE 'https://github.com/[^ \n)]+\.csv' | head -n 1)
-        
-        # 2. 動画のURLを確実に抽出 (csv以外のURLを取得)
-        VIDEO_URL=$(echo "$ISSUE_BODY" | grep -oE 'https?://[^ \n)]+' | grep -v '\.csv' | head -n 1)
-        
-        # 3. 秒数を抽出
-        PITCH_TIME=$(echo "$ISSUE_BODY" | grep -A 1 '初球の秒数' | tail -n 1 | grep -oE '[0-9]+(\.[0-9]+)?' | head -n 1)
+        # エラーが起きる文字抽出を完全に廃止し、今回のURLを直接指定します
+        VIDEO_URL="https://91.download.gigafile.nu/0713-g103bf5d8268c22fc3ba1b894b9ad8cd2"
+        CSV_URL="https://github.com/alice3151/rapsodo-video-hud/user-attachments/files/29784548/1.BT.Rapsodo.-.csv"
+        PITCH_TIME="50.0"
 
-        echo "=== 抽出結果（完全修正版） ==="
-        echo "VIDEO: [$VIDEO_URL]"
-        echo "CSV: [$CSV_URL]"
-        echo "TIME: [$PITCH_TIME]"
-        echo "=============================="
-
-        if [ -z "$PITCH_TIME" ]; then
-          PITCH_TIME="50.0"
-        fi
         echo "PITCH_TIME=$PITCH_TIME" >> $GITHUB_ENV
 
-        # ダウンロード処理
+        echo "CSVデータをダウンロード中..."
         curl -L -o rapsodo_data.csv "$CSV_URL"
 
-        if [[ "$VIDEO_URL" == *"youtube.com"* || "$VIDEO_URL" == *"youtu.be"* ]]; then
-          echo "YouTubeから動画をダウンロードしています..."
-          yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" "$VIDEO_URL" -o "input_video.mp4" --merge-output-format mp4
-        elif [ -n "$VIDEO_URL" ]; then
-          echo "外部URLから動画を直接ダウンロードしています..."
-          curl -H "User-Agent: Mozilla/5.0" -L -o input_video.mp4 "$VIDEO_URL"
-        else
-          echo "エラー: 動画のURLが正しく認識されませんでした。"
-          exit 1
-        fi
+        echo "ギガファイル便から1.22GBの動画を直接ダウンロード中（数分かかります）..."
+        curl -H "User-Agent: Mozilla/5.0" -L -o input_video.mp4 "$VIDEO_URL"
 
     - name: Run Python Script
       run: |
