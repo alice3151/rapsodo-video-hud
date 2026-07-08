@@ -26,43 +26,46 @@ jobs:
 
     - name: Parse Issue Inputs and Download Files
       id: parse_args
-      # Issueに入力された内容を安全に読み込みます
       env:
         ISSUE_BODY: ${{ github.event.issue.body }}
       run: |
-        # 1. CSVのURLを抽出
-        CSV_URL=$(echo "$ISSUE_BODY" | grep -oE 'https://github.com/[^ \n)]+\.csv' | head -n 1)
-        
-        # 2. 動画のURLを抽出（YouTube、ギガファイル便、なんでも対応）
-        VIDEO_URL=$(echo "$ISSUE_BODY" | grep -oE 'https?://[^ \n)]+' | grep -v '\.csv' | head -n 1)
-        
-        # 3. 秒数を抽出
-        PITCH_TIME=$(echo "$ISSUE_BODY" | grep -A 1 '初球の秒数' | tail -n 1 | grep -oE '[0-9]+(\.[0-9]+)?' | head -n 1)
+        # 1. 入力された文章から、邪魔な隠れリンク形式などをきれいに掃除します
+        CLEAN_BODY=$(echo "$ISSUE_BODY" | sed -E 's/\[([^]]*)\]\(([^)]*)\)/\2/g' | sed 's/投球の秒数/初球の秒数/g')
 
-        echo "=== 読み込みチェック ==="
+        # 2. CSVのURLを正確に抽出
+        CSV_URL=$(echo "$CLEAN_BODY" | grep -oE 'https://github.com/[^ \n\r)]+\.csv' | head -n 1)
+        
+        # 3. 動画のURLを正確に抽出（csvを除外）
+        VIDEO_URL=$(echo "$CLEAN_BODY" | grep -oE 'https?://[^ \n\r)]+' | grep -v '\.csv' | head -n 1)
+        
+        # 4. 秒数を正確に抽出
+        PITCH_TIME=$(echo "$CLEAN_BODY" | grep -A 1 '初球の秒数' | tail -n 1 | grep -oE '[0-9]+(\.[0-9]+)?' | head -n 1)
+
+        echo "=== 読み込みチェック（完全自動版） ==="
         echo "VIDEO: [$VIDEO_URL]"
         echo "CSV: [$CSV_URL]"
         echo "TIME: [$PITCH_TIME]"
-        echo "========================"
+        echo "======================================"
 
         if [ -z "$PITCH_TIME" ]; then
           PITCH_TIME="50.0"
         fi
         echo "PITCH_TIME=$PITCH_TIME" >> $GITHUB_ENV
 
-        # ダウンロード処理
+        if [ -z "$VIDEO_URL" ] || [ -z "$CSV_URL" ]; then
+          echo "エラー: 動画URLまたはCSVのURLが正常に読み込めませんでした。"
+          exit 1
+        fi
+
+        # ダウンロード開始
         curl -L -o rapsodo_data.csv "$CSV_URL"
 
         if [[ "$VIDEO_URL" == *"youtube.com"* || "$VIDEO_URL" == *"youtu.be"* ]]; then
-          echo "YouTubeから動画をダウンロード中..."
+          echo "YouTubeから動画を安全にダウンロード中..."
           yt-dlp -f "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best" "$VIDEO_URL" -o "input_video.mp4" --merge-output-format mp4
-        elif [ -n "$VIDEO_URL" ]; then
-          echo "外部URLから動画をダウンロード中..."
-          # ギガファイル便などのブロックを回避する設定
-          curl -H "User-Agent: Mozilla/5.0" -L -o input_video.mp4 "$VIDEO_URL"
         else
-          echo "エラー: 動画URLが見つかりません"
-          exit 1
+          echo "ギガファイル便などの外部URLからダウンロード中..."
+          curl -H "User-Agent: Mozilla/5.0" -L -o input_video.mp4 "$VIDEO_URL"
         fi
 
     - name: Run Python Script
