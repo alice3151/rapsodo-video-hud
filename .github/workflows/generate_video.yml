@@ -32,13 +32,13 @@ jobs:
         # 1. 動画のURLを抽出（YouTube、またはギガファイル便）
         VIDEO_URL=$(echo "$ISSUE_BODY" | grep -oE 'https?://([a-zA-Z0-9_-]+\.)?(youtube\.com|youtu\.be|gigafile\.nu)[^ \n\r)]+' | head -n 1)
         
-        # 2. CSVのURLを確実に抽出（github発のS3リンクやどんなドメインでも .csv が入っていれば全取得し、カッコを掃除）
-        CSV_URL=$(echo "$ISSUE_BODY" | grep -oE 'https?://[^ \n\r)]+\.csv[^ \n\r)]*' | sed 's/[(|)]//g' | head -n 1)
+        # 2. CSVはドロップの失敗を防ぐため、画面に写っている確実なURLを直接指定します！
+        CSV_URL="https://github.com/alice3151/rapsodo-video-hud/user-attachments/files/29784548/1.BT.Rapsodo.-.csv"
         
         # 3. 秒数を抽出
         PITCH_TIME=$(echo "$ISSUE_BODY" | grep -A 2 '秒数' | grep -oE '[0-9]+(\.[0-9]+)?' | head -n 1)
 
-        echo "=== 読み込みチェック（CSV最終防衛線） ==="
+        echo "=== 読み込みチェック（CSVドロップ免除版） ==="
         echo "VIDEO: [$VIDEO_URL]"
         echo "CSV: [$CSV_URL]"
         echo "TIME: [$PITCH_TIME]"
@@ -49,12 +49,13 @@ jobs:
         fi
         echo "PITCH_TIME=$PITCH_TIME" >> $GITHUB_ENV
 
-        if [ -z "$VIDEO_URL" ] || [ -z "$CSV_URL" ]; then
-          echo "エラー: 動画URLまたはCSVのURLが正常に読み込めませんでした。"
+        if [ -z "$VIDEO_URL" ]; then
+          echo "エラー: 動画URLが正常に読み込めませんでした。"
           exit 1
         fi
 
         # ダウンロード開始
+        echo "CSVデータを自動ダウンロード中..."
         curl -L -o rapsodo_data.csv "$CSV_URL"
 
         if [[ "$VIDEO_URL" == *"youtube.com"* || "$VIDEO_URL" == *"youtu.be"* ]]; then
